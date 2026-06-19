@@ -89,3 +89,27 @@ inject_after_line "flag.Parse()" "InitPatches()"
 inject_after_line "nameserver :=" "SetupPatchesFlags()"
 inject_after_context "$REMOTE_TCP_CONTEXT" 'if !ProcessRemoteTCP(logger, n.core.MTU(), c, r) { continue }'
 inject_after_context "$REMOTE_UDP_CONTEXT" 'if !IsIPAllowed(remoteUdpAddr) { continue }'
+
+OLD_BLOCK=$(cat << 'EOF'
+if !ProcessRemoteTCP(logger, n.core.MTU(), c, r) { continue }
+					go types.ProxyTCP(n.core.MTU(), c, r)
+EOF
+)
+
+NEW_BLOCK=$(cat << 'EOF'
+if !ProcessRemoteTCP(logger, n.core.MTU(), c, r) { continue }
+					//go types.ProxyTCP(n.core.MTU(), c, r)
+EOF
+)
+
+awk -v old="$OLD_BLOCK" -v new="$NEW_BLOCK" '
+BEGIN { RS = "^$" }
+{
+    idx = index($0, old)
+    if (idx > 0) {
+        printf "%s%s%s", substr($0, 1, idx-1), new, substr($0, idx + length(old))
+    } else {
+        print $0
+    }
+}
+' "$TARGET_FILE" > "${TARGET_FILE}.tmp" && mv "${TARGET_FILE}.tmp" "$TARGET_FILE"
