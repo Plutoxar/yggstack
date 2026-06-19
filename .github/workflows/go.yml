@@ -1,0 +1,54 @@
+name: Go
+
+on:
+  pull_request:
+    paths-ignore:
+      - "README.md"
+  push:
+    branches:
+      - develop
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+'
+      - '[0-9]+.[0-9]+.[0-9]+'
+      - 'v[0-9]+.[0-9]+.[0-9]+-[0-9]+'
+      - '[0-9]+.[0-9]+.[0-9]+-[0-9]+'
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build Linux AMD64
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c 
+        with:
+          go-version: '1.26.4'
+
+      - name: Check if commit needs a release upload
+        run: |
+          echo "RELEASENAME=patched-trunk" >> "${GITHUB_ENV}"
+
+      - name: Build yggstack executable
+        run: |
+          set -e
+          bash ./patch.sh
+          GOOS=linux GOARCH=amd64 ./build -s -o yggstack
+          ! ldd yggstack
+
+      - name: Publish release
+        run: |
+          gh release create "${RELEASENAME}" yggstack || gh release upload "${RELEASENAME}" yggstack --clobber
+        env:
+          GH_TOKEN: ${{ github.token }}
